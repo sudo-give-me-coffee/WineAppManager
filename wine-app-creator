@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+
+supplied_args=0
+WINEARCH=win32
+WINEDECORATE=Y
+
+for arg in "${@}";do
+  [[ "${arg}" = "--name="* ]] && {
+    appname=$(echo ${arg} | cut -c 8-)
+    supplied_args=$((${supplied_args}+1))
+  }
+  [[ "${arg}" = "--version="* ]] && {
+    appversion=$(echo ${arg} | cut -c 11-)
+    supplied_args=$((${supplied_args}+1))
+  }
+  [[ "${arg}" = "--icon="* ]] && {
+    appicon=$(echo ${arg} | cut -c 8-)
+    supplied_args=$((${supplied_args}+1))
+  }
+  [[ "${arg}" = "--installer="* ]] && {
+    appinstaller=$(echo ${arg} | cut -c 13-)
+    supplied_args=$((${supplied_args}+1))
+  }  
+  [[ "${arg}" = "--main-executable="* ]] && {
+    appexecutable=$(echo ${arg} | cut -c 19-)
+    supplied_args=$((${supplied_args}+1))
+  }
+  [[ "${arg}" = "--winetricks="* ]] && {
+    tricks=$(echo ${arg} | cut -c 14-)
+  }
+  [[ "${arg}" = "--wine64" ]] && {
+    WINEARCH=win64
+  }
+  [[ "${arg}" = "--use-csd" ]] && {
+    WINEDECORATE=N
+  }
+done
+
+
+[[ ! "${supplied_args}" = "0"  ]] && {
+  [[ -z "${appname}" ]] && {
+    echo "Error: '--name=' parameter Cannot be empty"
+    supplied_args=6
+  }
+  
+  [[ -z "${appversion}" ]] && {
+    echo "Error: '--version=' parameter Cannot be empty"
+    supplied_args=7
+  }
+  
+  [[ -z "${appexecutable}" ]] && {
+    echo "Error: '--main-executable=' parameter Cannot be empty"
+    supplied_args=8
+  }
+
+  [[ ! -f "${appicon}" ]] && {
+    echo "Error: file passed with '--icon=' doesn't exists"
+    supplied_args=9
+  }
+
+  [[ ! -f "${appinstaller}" ]] && {
+   echo "Error: file passed with '--installer=' doesn't exists"
+   supplied_args=10
+  }
+}
+
+
+[[ "${supplied_args}" = "5"  ]] && {
+  installerhash=$(sha1sum "${appinstaller}" | cut -d' ' -f1)
+  
+  echo "[1/3] Creating profile directory structure..."
+  mkdir -p "WineAppManager/Profiles/${installerhash}"
+  cp "${appicon}" "WineAppManager/Profiles/${installerhash}/icon.png"
+  echo -n > "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo "[2/3] Creating script for installation..."
+  echo -e "#!/usr/bin/env bash\n" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'export HERE="$(dirname "$(readlink -f "${0}")")"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export APP_NAME='${appname}'" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export APP_VERSION='${appversion}'" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e 'export BOTTLE_NAME=$(echo ${APP_NAME} | sed "s|[[:space:]]|-|g")' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export WINEPREFIX=\"\$(mktemp -d)\"" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export WINEARCH='${WINEARCH}'" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export XDG_CONFIG_HOME=\"\${WINEPREFIX}/.config\"" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "export XDG_DATA_HOME=\"\${WINEPREFIX}/.data\"\n" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'cat > "${WINEPREFIX}/default.reg" <<\EOF' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "REGEDIT4" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "[HKEY_CURRENT_USER\Control Panel\Desktop]" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '"FontSmoothing"="2"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '"FontSmoothingGamma"=dword:00000578' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '"FontSmoothingOrientation"=dword:00000001' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '"FontSmoothingType"=dword:00000002' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '[HKEY_CURRENT_USER\Software\Wine\X11 Driver]' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "\"Decorated\"=\"${WINEDECORATE}\"" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"   
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'EOF' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"  
+     
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'wine regedit "${WINEPREFIX}/default.reg"' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'rm -rf "${WINEPREFIX}/drive_c/users/${USER}/Local Settings/Application Data"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'ln -s "../../../Program Files" "${WINEPREFIX}/drive_c/users/${USER}/Local Settings/Application Data"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  [ ! -z "${tricks}" ] && {
+    echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+    echo "winetricks ${tricks}" \
+       >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  }
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "wine \"\${1}\"\n" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo "exename=\$(find \"\${WINEPREFIX}/drive_c\" -name \"${appexecutable}\")" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '[[ -z "${exename}" ]] && {' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '  echo WAM_MESSAGE="Main executable not found"' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '  rm -rf "${WINEPREFIX}"' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '  exit 1' >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "}\n" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'cat > "${WINEPREFIX}/wam.${BOTTLE_NAME}.desktop" <<\EOF' \
+       >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo '[Desktop Entry]' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'Type=Application' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'StartupNotify=true' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "StartupWMClass=${appexecutable}" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "Name=${appname}" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "Icon=$(basename -s .exe ${appexecutable})" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "Exec=winappman \"${appname}\"" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo -e "EOF\n" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+     
+  echo -e "echo \"\${exename}\" | cut -c 29- > \${WINEPREFIX}/executable" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+     
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+      
+  echo 'cp "${HERE}/icon.png" ${WINEPREFIX}' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+     
+  echo >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+     
+  echo 'sed -i "s|C:\\\\\\\\users\\\\\\\\${USER}\\\\\\\\Local Settings\\\\\\\\Application Data\\\\\\\\|C:\\\\\\\\Program Files\\\\\\\\|g" ${WINEPREFIX}/system.reg' \
+    >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'rm -rf "${WINEPREFIX}/dosdevices" "${WINEPREFIX}/user.reg"  "${WINEPREFIX}/userdef.reg" "${WINEPREFIX}/.update-timestamp"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'rm -rf "${WINEPREFIX}/drive_c/users"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo 'rm -rf "${WINEPREFIX}/.config" "${WINEPREFIX}/.data"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'find "${WINEPREFIX}" -type f -exec md5sum {} \; > "${WINEPREFIX}/md5sums"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo 'echo "$(md5sum ${WINEPREFIX}/wam.${BOTTLE_NAME}.desktop | cut -d\  -f1)  /usr/share/applications/wam.${BOTTLE_NAME}.desktop" >> "${WINEPREFIX}/md5sums"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'echo -e "/\n/var\n/var/lib\n/var/lib/wam\n/var/lib/wam/bottles" > "${WINEPREFIX}/filelist"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo 'find "${WINEPREFIX}" >> "${WINEPREFIX}/filelist"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo 'echo -e "/usr\n/usr/share\n/usr/share/applications\n/usr/share/applications/wam.${BOTTLE_NAME}.desktop" >> "${WINEPREFIX}/filelist"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo 'sed -i "s|${WINEPREFIX}|/var/lib/wam/bottles/${BOTTLE_NAME}|g" "${WINEPREFIX}/filelist"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo 'sed -i "s|${WINEPREFIX}|/var/lib/wam/bottles/${BOTTLE_NAME}|g" "${WINEPREFIX}/md5sums"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  echo 'echo -e "\n\nPackage: ${BOTTLE_NAME}\nStatus: install ok installed\nArchitecture: all\nVersion: ${APP_VERSION}\n\n" > "${WINEPREFIX}/status"' \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
+  echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+  
+  echo "wine-app-register ${WINEPREFIX}" \
+     >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
+}
+
+[[ "${supplied_args}" = "5" ]] && {
+  exit 0
+}
+
+cat <<\EOF
+
+ Wine App Manager CLI - 1.0
+-----------------------------------------------------
+
+ This tool allows to create an automated management 
+ of Wine prefixes on the system side by using 
+ profiles
+
+
+ How this works?
+-----------------------------------------------------
+
+ This script takes five required arguments, with 
+ four optional arguments:
+ 
+   --name="Application name"
+   --version="3.2.1"
+   --icon="application icon.png"
+   --installer="app setup.exe"
+   --main-executable="installed-executable.exe"
+
+ Optionally, and if the application needs it, you 
+ can install winetricks packages with:
+
+   --winetricks="package1 package2 package3"
+   
+ You can set the category on menu with:
+
+   --category="Internet"
+   
+ If you don't pass category, the appliation will
+ be placed on "Utility" category
+ 
+ To create a 64 bit app pass:
+
+   --wine64
+   
+ By default Wine create prefixes for 32 bit apps
+ 
+ And you can disable application window decoration
+ with:
+ 
+   --use-csd
+
+EOF
+
+exit 1
+
+
