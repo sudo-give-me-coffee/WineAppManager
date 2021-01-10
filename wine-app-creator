@@ -147,7 +147,7 @@ done
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
   echo "Name=${appname}" \
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
-  echo "Icon=$(basename -s .exe ${appexecutable})" \
+  echo "Icon=/var/lib/wam/bottles/Sumatra-PDF/icon.png" \
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
   echo "Exec=winappman \"${appname}\"" \
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
