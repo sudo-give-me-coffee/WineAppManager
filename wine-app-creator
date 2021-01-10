@@ -200,7 +200,7 @@ done
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh" 
   echo "" >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
   
-  echo "wine-app-register ${WINEPREFIX}" \
+  echo "sudo wine-app-register ${WINEPREFIX}" \
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
      
   exit 0
