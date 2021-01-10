@@ -202,9 +202,7 @@ done
   
   echo "wine-app-register ${WINEPREFIX}" \
      >> "WineAppManager/Profiles/${installerhash}/preparer.sh"
-}
-
-[[ "${supplied_args}" = "5" ]] && {
+     
   exit 0
 }
 
